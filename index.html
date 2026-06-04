@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>نبض ایران</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+    :root {
+      --bg:       #06080e;
+      --bg2:      #0b0e18;
+      --card:     #0f1220;
+      --card-b:   rgba(196,154,48,0.08);
+      --border:   rgba(255,255,255,0.045);
+      --text:     #eaeff7;
+      --sub:      #5c6580;
+      --muted:    #3a4058;
+      --gold:     #d4a934;
+      --gold-l:   #f5d060;
+      --gold-d:   #9a7420;
+      --goldg:    linear-gradient(135deg, #9a7420, #f5d060 45%, #d4a934 70%, #8a6010);
+      --green:    #22c55e;
+      --green-bg: rgba(34,197,94,0.08);
+      --red:      #ef4444;
+      --red-bg:   rgba(239,68,68,0.08);
+    }
+
+    html {
+      height: 100%;
+      background: var(--bg);
+    }
+
+    body {
+      min-height: 100%;
+      background:
+        radial-gradient(ellipse 100% 60% at 50% -15%, rgba(212,169,52,0.06) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 50% at 100% 100%, rgba(100,80,40,0.04) 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+      font-family: 'Vazirmatn', Tahoma, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      direction: rtl;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    /* ═══════════════════════════════════════
+       HEADER
+    ═══════════════════════════════════════ */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: rgba(6,8,14,0.88);
+      backdrop-filter: blur(24px) saturate(1.2);
+      -webkit-backdrop-filter: blur(24px) saturate(1.2);
+      border-bottom: 1px solid rgba(212,169,52,0.1);
+    }
+
+    .header-inner {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 14px 16px 11px;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+    }
+
+    .brand h1 {
+      font-size: 19px;
+      font-weight: 900;
+      background: var(--goldg);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+    }
+
+    .brand .en {
+      font-size: 9.5px;
+      letter-spacing: 3.5px;
+      color: var(--sub);
+      font-weight: 600;
+      direction: ltr;
+      display: block;
+      text-align: right;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(34,197,94,0.5);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity:1; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+      50%     { opacity:0.4; box-shadow: 0 0 2px rgba(34,197,94,0.2); }
+    }
+
+    .ts { font-size: 11px; color: var(--sub); font-weight: 500; direction: ltr; }
+
+    /* ═══════════════════════════════════════
+       CONTENT WRAPPER
+    ═══════════════════════════════════════ */
+    .wrap {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 14px;
+    }
+
+    /* ═══════════════════════════════════════
+       MOOD BAR
+    ═══════════════════════════════════════ */
+    .mood {
+      margin: 12px 0 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(212,169,52,0.04);
+      border: 1px solid rgba(212,169,52,0.1);
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mood.show { display: flex; }
+    .mood-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mood-icon { font-size: 15px; }
+    .mood-label { font-size: 12.5px; font-weight: 700; }
+    .mood-val { font-size: 11.5px; font-weight: 700; direction: ltr; }
+
+    /* ═══════════════════════════════════════
+       SECTION
+    ═══════════════════════════════════════ */
+    .section { margin-top: 22px; }
+    .section:first-child { margin-top: 14px; }
+
+    .sec-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .sec-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    .sec-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to left, transparent, rgba(212,169,52,0.15), transparent);
+    }
+
+    /* ═══════════════════════════════════════
+       GRID — adaptive, last-odd spans full
+    ═══════════════════════════════════════ */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .grid > .card:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    /* ═══════════════════════════════════════
+       CARD
+    ═══════════════════════════════════════ */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.12s;
+    }
+
+    .card:active { transform: scale(0.975); }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      padding: 1px;
+      background: linear-gradient(160deg, rgba(212,169,52,0.12), transparent 40%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* flash */
+    @keyframes fUp { 0%,100%{box-shadow:inset 0 0 0 transparent} 50%{box-shadow:inset 0 0 30px rgba(34,197,94,0.06)} }
+    @keyframes fDn { 0%,100%{box-shadow:inset 0 0 0 transparent} 50%{box-shadow:inset 0 0 30px rgba(239,68,68,0.06)} }
+    .card.flash-up { animation: fUp 0.6s ease; }
+    .card.flash-dn { animation: fDn 0.6s ease; }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .asset-img {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: contain;
+      background: rgba(255,255,255,0.04);
+      flex-shrink: 0;
+    }
+
+    .asset-img.square {
+      border-radius: 10px;
+    }
+
+    .asset-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .asset-name {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .asset-sub {
+      font-size: 10.5px;
+      color: var(--sub);
+      font-weight: 500;
+      margin-top: 2px;
+      direction: ltr;
+      text-align: right;
+    }
+
+    .price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .price-val {
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: -0.6px;
+      direction: ltr;
+      line-height: 1;
+    }
+
+    .price-unit {
+      font-size: 10.5px;
+      color: var(--sub);
+      font-weight: 600;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3.5px 8px;
+      border-radius: 8px;
+      direction: ltr;
+    }
+    .pill.up   { color: var(--green); background: var(--green-bg); }
+    .pill.dn   { color: var(--red);   background: var(--red-bg); }
+    .pill.flat { color: var(--sub);   background: rgba(255,255,255,0.04); font-size:10px; }
+
+    /* ── BTC wide card ── */
+    .btc-card {
+      background: var(--card);
+      border: 1px solid rgba(247,147,26,0.1);
+      border-radius: 18px;
+      padding: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btc-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      padding: 1px;
+      background: linear-gradient(160deg, rgba(247,147,26,0.15), transparent 40%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .btc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .btc-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btc-box {
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .btc-box .lbl {
+      font-size: 10px;
+      color: var(--sub);
+      font-weight: 600;
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btc-box .lbl img { width: 14px; height: 10px; border-radius: 2px; }
+
+    .btc-box .val {
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.4px;
+      direction: ltr;
+      line-height: 1;
+    }
+
+    /* ═══════════════════════════════════════
+       SKELETON
+    ═══════════════════════════════════════ */
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .sk {
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0.03) 30%,
+        rgba(255,255,255,0.06) 50%,
+        rgba(255,255,255,0.03) 70%);
+      background-size: 200% 100%;
+      animation: shimmer 1.8s ease infinite;
+      border-radius: 6px;
+    }
+
+    /* ═══════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════ */
+    .footer {
+      text-align: center;
+      padding: 28px 16px 20px;
+    }
+
+    .ft-sep {
+      width: 40px;
+      height: 2px;
+      background: var(--goldg);
+      border-radius: 1px;
+      margin: 0 auto 12px;
+      opacity: 0.5;
+    }
+
+    .ft-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .ft-brand svg { opacity: 0.7; }
+
+    .ft-brand span {
+      font-size: 13px;
+      font-weight: 800;
+      background: var(--goldg);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      opacity: 0.8;
+    }
+
+    .ft-sub { font-size: 10.5px; color: var(--muted); }
+
+    /* ═══════════════════════════════════════
+       Utilities
+    ═══════════════════════════════════════ */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-top">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 100 80" fill="none">
+          <defs>
+            <linearGradient id="lg" x1="0" y1="80" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"  stop-color="#8a6010"/>
+              <stop offset="35%" stop-color="#f5d060"/>
+              <stop offset="65%" stop-color="#d4a934"/>
+              <stop offset="100%" stop-color="#9a7420"/>
+            </linearGradient>
+          </defs>
+          <polyline points="2,46 12,46 18,38 25,56 34,16 40,48 50,48"
+            stroke="url(#lg)" stroke-width="3" fill="none"
+            stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="56" y="38" width="11" height="28" rx="2.5" fill="url(#lg)"/>
+          <rect x="70" y="26" width="11" height="40" rx="2.5" fill="url(#lg)"/>
+          <rect x="84" y="12" width="11" height="54" rx="2.5" fill="url(#lg)"/>
+        </svg>
+        <div>
+          <h1>نبض ایران</h1>
+          <span class="en">IRANNABZ</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="live-badge"><div class="live-dot"></div> زنده</div>
+      <div class="ts" id="ts">در حال دریافت…</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- Mood -->
+  <div class="mood" id="mood">
+    <div class="mood-right">
+      <span class="mood-icon" id="moodIc"></span>
+      <span class="mood-label" id="moodLbl"></span>
+    </div>
+    <span class="mood-val" id="moodVal"></span>
+  </div>
+
+  <!-- فلزات داخلی -->
+  <section class="section">
+    <div class="sec-head">
+      <span class="sec-title">فلزات داخلی</span>
+      <div class="sec-line"></div>
+    </div>
+    <div class="grid" id="g-dom"></div>
+  </section>
+
+  <!-- فلزات جهانی -->
+  <section class="section">
+    <div class="sec-head">
+      <span class="sec-title">فلزات جهانی</span>
+      <div class="sec-line"></div>
+    </div>
+    <div class="grid" id="g-met"></div>
+  </section>
+
+  <!-- ارز و رمزارز -->
+  <section class="section">
+    <div class="sec-head">
+      <span class="sec-title">ارز و رمزارز</span>
+      <div class="sec-line"></div>
+    </div>
+    <div id="g-fx">
+      <div class="btc-card" id="btcCard">
+        <div class="btc-header">
+          <div class="btc-left">
+            <img class="asset-img" id="btcImg" src="" alt="BTC" width="36" height="36"/>
+            <div class="asset-meta">
+              <div class="asset-name">بیتکوین</div>
+              <div class="asset-sub">Bitcoin · BTC</div>
+            </div>
+          </div>
+          <span id="btcPill"></span>
+        </div>
+        <div class="btc-grid">
+          <div class="btc-box">
+            <div class="lbl"><img src="https://flagcdn.com/w20/ir.png" alt="IR"/> تومان</div>
+            <div class="val" id="btcIrt"><div class="sk" style="height:17px;width:85%"></div></div>
+          </div>
+          <div class="btc-box">
+            <div class="lbl"><img src="https://flagcdn.com/w20/us.png" alt="US"/> دلار</div>
+            <div class="val" id="btcUsd"><div class="sk" style="height:17px;width:70%"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid" style="margin-top:10px" id="g-usdt"></div>
+    </div>
+  </section>
+
+  <!-- انرژی -->
+  <section class="section">
+    <div class="sec-head">
+      <span class="sec-title">انرژی</span>
+      <div class="sec-line"></div>
+    </div>
+    <div class="grid" id="g-oil"></div>
+  </section>
+
+</div>
+
+<footer class="footer">
+  <div class="ft-sep"></div>
+  <div class="ft-brand">
+    <svg width="16" height="14" viewBox="0 0 100 80" fill="none">
+      <defs><linearGradient id="fg" x1="0" y1="80" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#8a6010"/><stop offset="50%" stop-color="#f5d060"/><stop offset="100%" stop-color="#9a7420"/>
+      </linearGradient></defs>
+      <polyline points="2,46 12,46 18,38 25,56 34,16 40,48 50,48"
+        stroke="url(#fg)" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="56" y="38" width="11" height="28" rx="2.5" fill="url(#fg)"/>
+      <rect x="70" y="26" width="11" height="40" rx="2.5" fill="url(#fg)"/>
+      <rect x="84" y="12" width="11" height="54" rx="2.5" fill="url(#fg)"/>
+    </svg>
+    <span>IRANNABZ</span>
+  </div>
+  <div class="ft-sub">بروزرسانی خودکار هر ۶۰ ثانیه</div>
+</footer>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+/* ── Inline SVG icons per asset (no external images for metals) ── */
+const SVG_ICONS = {
+  gold: `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="17" fill="#f5d06015" stroke="#f5d060" stroke-width="0.8"/>
+    <circle cx="18" cy="18" r="12" fill="none" stroke="#f5d06030" stroke-width="0.5"/>
+    <text x="18" y="22" text-anchor="middle" fill="#f5d060" font-size="13" font-weight="900" font-family="system-ui" letter-spacing="-0.5">Au</text>
+  </svg>`,
+  silver: `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="17" fill="#b8c4d815" stroke="#b8c4d8" stroke-width="0.8"/>
+    <circle cx="18" cy="18" r="12" fill="none" stroke="#b8c4d830" stroke-width="0.5"/>
+    <text x="18" y="22" text-anchor="middle" fill="#b8c4d8" font-size="13" font-weight="900" font-family="system-ui" letter-spacing="-0.5">Ag</text>
+  </svg>`,
+  plat: `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="17" fill="#6890c015" stroke="#6890c0" stroke-width="0.8"/>
+    <circle cx="18" cy="18" r="12" fill="none" stroke="#6890c030" stroke-width="0.5"/>
+    <text x="18" y="22" text-anchor="middle" fill="#6890c0" font-size="13" font-weight="900" font-family="system-ui" letter-spacing="-0.5">Pt</text>
+  </svg>`,
+  pallad: `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="17" fill="#48a8b015" stroke="#48a8b0" stroke-width="0.8"/>
+    <circle cx="18" cy="18" r="12" fill="none" stroke="#48a8b030" stroke-width="0.5"/>
+    <text x="18" y="22" text-anchor="middle" fill="#48a8b0" font-size="13" font-weight="900" font-family="system-ui" letter-spacing="-0.5">Pd</text>
+  </svg>`,
+  copper: `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="17" fill="#c8784015" stroke="#c87840" stroke-width="0.8"/>
+    <circle cx="18" cy="18" r="12" fill="none" stroke="#c8784030" stroke-width="0.5"/>
+    <text x="18" y="22" text-anchor="middle" fill="#c87840" font-size="13" font-weight="900" font-family="system-ui" letter-spacing="-0.5">Cu</text>
+  </svg>`,
+  oil: `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="17" fill="#14b8a615" stroke="#14b8a6" stroke-width="0.8"/>
+    <path d="M14 12h8l2 4v8a2 2 0 01-2 2h-8a2 2 0 01-2-2v-8z" fill="none" stroke="#14b8a6" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M16 12v-2h4v2" fill="none" stroke="#14b8a6" stroke-width="1" stroke-linecap="round"/>
+    <line x1="14" y1="20" x2="22" y2="20" stroke="#14b8a630" stroke-width="0.8"/>
+  </svg>`,
+};
+
+SVG_ICONS.btc = `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="18" cy="18" r="17" fill="#f7931a"/>
+  <text x="18.5" y="23" text-anchor="middle" fill="white" font-size="16" font-weight="900" font-family="Arial,sans-serif">₿</text>
+</svg>`;
+
+SVG_ICONS.usdt = `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="18" cy="18" r="17" fill="#26a17b"/>
+  <text x="18" y="23" text-anchor="middle" fill="white" font-size="15" font-weight="900" font-family="Arial,sans-serif">₮</text>
+</svg>`;
+
+function svgUri(key) {
+  return 'data:image/svg+xml,' + encodeURIComponent(SVG_ICONS[key] || SVG_ICONS.gold);
+}
+
+function imgTag(key) {
+  return `<img class="asset-img" src="${svgUri(key)}" alt="" width="36" height="36"/>`;
+}
+
+/* ── Helpers ───────────────────────────────────── */
+const FA = '۰۱۲۳۴۵۶۷۸۹';
+const toFa = s => String(s).replace(/[0-9]/g, d => FA[+d]);
+const fmtT = n => n == null ? '—' : toFa(Math.round(n).toLocaleString('en'));
+const fmtD = (n,d=2) => n == null ? '—' : '$'+Number(n).toLocaleString('en',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+/* ── Cache ─────────────────────────────────────── */
+const CK = 'inz_c2', PK = 'inz_p2';
+let cache={}, prev={};
+try { cache = JSON.parse(localStorage.getItem(CK)||'{}'); } catch{}
+try { prev  = JSON.parse(localStorage.getItem(PK)||'{}'); } catch{}
+function saveC(k,v) { cache[k]=v; try{localStorage.setItem(CK,JSON.stringify(cache))}catch{} }
+function saveP()    { try{localStorage.setItem(PK,JSON.stringify(prev))}catch{} }
+
+function chg(k, cur) {
+  const old = prev[k];
+  if (cur!=null) prev[k] = cur;
+  return (cur!=null && old!=null && old>0) ? ((cur-old)/old)*100 : null;
+}
+
+/* ── Robust fetch: direct → 3 proxies, with retries ── */
+const PROXIES = [
+  u => 'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+  u => 'https://corsproxy.io/?url='+encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),
+];
+
+async function robust(url, ms=12000) {
+  const go = (u, t) => {
+    const c = new AbortController();
+    const id = setTimeout(()=>c.abort(), t);
+    return fetch(u, {signal:c.signal}).then(r => {
+      clearTimeout(id);
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+  };
+  // Direct
+  try { return await go(url, ms); } catch{}
+  // Proxies
+  for (const p of PROXIES) {
+    try { return await go(p(url), ms+5000); } catch{}
+  }
+  return null; // all failed → null instead of throw
+}
+
+/* ── Data extraction (from n8n workflow) ───────── */
+function exIR(o) {
+  if(!o) return null;
+  for(const v of [o?.data?.price,o?.data?.Price,o?.data?.lastPrice,o?.data?.last_price,
+    o?.data?.value,o?.data?.gold_price,o?.data?.priceGold,o?.price,o?.Price,
+    o?.lastPrice,o?.value,o?.result?.price,o?.data?.[0]?.price,o?.[0]?.price])
+    { if(v!=null && !isNaN(+v)) return +v; }
+  return null;
+}
+
+function exSilver(o) {
+  if(!o) return null;
+  const arrs=[o?.data?.products,o?.data?.items,o?.data?.results,o?.data,
+    o?.products,o?.items,o?.results,o].filter(Array.isArray);
+  for(const a of arrs) for(const it of a) {
+    if(!it||typeof it!=='object') continue;
+    const b=JSON.stringify(it).toLowerCase();
+    if(['silver','نقره','noghre','XAG'].some(k=>b.includes(k.toLowerCase()))
+      && !['gold','طلا','tala','XAU'].some(k=>b.includes(k.toLowerCase()))) {
+      const p=it.price??it.value??it.amount??it.last_price??it.current_price;
+      if(p!=null&&!isNaN(+p)) return +p;
+    }
+  }
+  return exIR(o);
+}
+
+function scale(v,lo,hi) {
+  if(v==null) return null;
+  for(const m of [1,10,100,1000,0.1]) { const s=v*m; if(s>=lo&&s<=hi) return Math.round(s); }
+  return Math.round(v);
+}
+
+function exBit(o) { return o?.data?.[0]?.price ?? o?.data?.price ?? null; }
+
+function exOil(o) {
+  const r = (Array.isArray(o)?o[0]?.price:null)
+    ?? o?.results?.[0]?.price ?? o?.matches?.[0]?.price
+    ?? o?.data?.[0]?.price ?? o?.data?.price
+    ?? o?.price ?? o?.last_price;
+  return r!=null ? +r : null;
+}
+
+/* ── Pill ──────────────────────────────────────── */
+function pill(c) {
+  if(c==null||isNaN(c)) return '<span class="pill flat">—</span>';
+  if(Math.abs(c)<0.005) return '<span class="pill flat">بدون تغییر</span>';
+  const u=c>0;
+  return `<span class="pill ${u?'up':'dn'}">${u?'▲':'▼'} ${Math.abs(c).toFixed(2)}%</span>`;
+}
+
+/* ── Card builder ─────────────────────────────── */
+function mkCard(id, iconKey, name, sym, priceHtml, unit, pillHtml) {
+  return `<div class="card" id="${id}">
+    <div class="card-head">
+      ${imgTag(iconKey)}
+      <div class="asset-meta">
+        <div class="asset-name">${name}</div>
+        <div class="asset-sub">${sym}</div>
+      </div>
+    </div>
+    <div class="price-row">
+      <span class="price-val">${priceHtml}</span>
+      <span class="price-unit">${unit}</span>
+    </div>
+    ${pillHtml}
+  </div>`;
+}
+
+function skelCard(iconKey, name, sym) {
+  return `<div class="card">
+    <div class="card-head">
+      ${imgTag(iconKey)}
+      <div class="asset-meta">
+        <div class="asset-name">${name}</div>
+        <div class="asset-sub">${sym}</div>
+      </div>
+    </div>
+    <div class="sk" style="height:22px;width:75%;margin-bottom:8px"></div>
+    <div class="sk" style="height:18px;width:40%"></div>
+  </div>`;
+}
+
+function flash(id, dir) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.classList.remove('flash-up','flash-dn');
+  void el.offsetWidth;
+  el.classList.add(dir>0?'flash-up':'flash-dn');
+}
+
+/* ── Skeleton init ─────────────────────────────── */
+function initSkel() {
+  document.getElementById('g-dom').innerHTML = [
+    skelCard('gold', 'طلای آبشده ۱۸', 'Gold 18K · تومان'),
+    skelCard('silver', 'نقره ۹۹۹', 'Silver 999 · تومان'),
+  ].join('');
+  document.getElementById('g-met').innerHTML = [
+    skelCard('gold',   'طلا',     'XAU · oz'),
+    skelCard('silver', 'نقره',    'XAG · oz'),
+    skelCard('plat',   'پلاتین',  'XPT · oz'),
+    skelCard('pallad', 'پالادیوم','XPD · oz'),
+    skelCard('copper', 'مس',      'HG · lb'),
+  ].join('');
+  document.getElementById('g-usdt').innerHTML =
+    skelCard('usdt', 'تتر / دلار', 'USDT · تومان');
+  document.getElementById('g-oil').innerHTML =
+    skelCard('oil', 'نفت خام', 'USOIL · بشکه');
+}
+
+/* ── Mood ──────────────────────────────────────── */
+function updateMood(ch) {
+  const vs=Object.values(ch).filter(v=>v!=null&&!isNaN(v));
+  if(!vs.length) return;
+  const avg=vs.reduce((a,b)=>a+b,0)/vs.length;
+  let ic,lbl,col;
+  if(avg>1.2)      { ic='🚀'; lbl='صعود قدرتمند'; col='var(--green)'; }
+  else if(avg>0.3) { ic='📈'; lbl='جوّ مثبت بازار'; col='var(--green)'; }
+  else if(avg<-1.2){ ic='💥'; lbl='ریزش سنگین';   col='var(--red)'; }
+  else if(avg<-0.3){ ic='📉'; lbl='جوّ منفی بازار'; col='var(--red)'; }
+  else             { ic='⚖️'; lbl='بازار در تعادل'; col='var(--sub)'; }
+  document.getElementById('moodIc').textContent=ic;
+  const ml=document.getElementById('moodLbl'); ml.textContent=lbl; ml.style.color=col;
+  const mv=document.getElementById('moodVal'); mv.textContent=(avg>=0?'+':'')+avg.toFixed(2)+'%'; mv.style.color=col;
+  document.getElementById('mood').classList.add('show');
+}
+
+/* ── Main fetch ────────────────────────────────── */
+let lastP = {};
+
+async function loadAll() {
+  const res = await Promise.allSettled([
+    robust('https://api.talasea.ir/api/market/getGoldPrice'),
+    robust('https://api.digikala.com/non-inventory/v1/prices/'),
+    robust('https://api.gold-api.com/price/XAU'),
+    robust('https://api.gold-api.com/price/XAG'),
+    robust('https://api.gold-api.com/price/XPT'),
+    robust('https://api.gold-api.com/price/XPD'),
+    robust('https://api.gold-api.com/price/HG'),
+    robust('https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCIRT&source=nobitex_spot'),
+    robust('https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCUSDT&source=nobitex_spot'),
+    robust('https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=USDTIRT&source=nobitex_spot'),
+    robust('https://api.bitpin.ir/v4/mth/matches/USOON_USDT/'),
+  ]);
+
+  const g = i => res[i].status==='fulfilled' ? res[i].value : null;
+
+  const p = {
+    goldIr:   scale(exIR(g(0)),     5e6,  1e8),
+    silverIr: scale(exSilver(g(1)), 1e5,  5e6),
+    xau:      g(2)?.price  ?? null,
+    xag:      g(3)?.price  ?? null,
+    xpt:      g(4)?.price  ?? null,
+    xpd:      g(5)?.price  ?? null,
+    copper:   g(6)?.price  ?? null,
+    btcIrt:   exBit(g(7)),
+    btcUsd:   exBit(g(8)),
+    usdt:     exBit(g(9)),
+    oil:      exOil(g(10)),
+  };
+
+  // Fill from cache if API failed
+  for (const k of Object.keys(p)) {
+    if (p[k]==null && cache[k]!=null) p[k] = cache[k];
+    if (p[k]!=null) saveC(k, p[k]);
+  }
+
+  const ch = {};
+  for (const k of Object.keys(p)) ch[k] = chg(k, p[k]);
+  saveP();
+
+  // Flash
+  const fmap = {goldIr:'c-goldIr',silverIr:'c-silverIr',xau:'c-xau',xag:'c-xag',
+    xpt:'c-xpt',xpd:'c-xpd',copper:'c-cu',usdt:'c-usdt',oil:'c-oil'};
+  for (const [k,id] of Object.entries(fmap))
+    if(lastP[k]!=null && p[k]!=null && lastP[k]!==p[k]) flash(id, p[k]-lastP[k]);
+  lastP = {...p};
+
+  // ── Render domestic ──
+  document.getElementById('g-dom').innerHTML = [
+    mkCard('c-goldIr', 'gold',
+      'طلای آبشده ۱۸', 'Gold 18K · IR',
+      fmtT(p.goldIr), 'تومان', pill(ch.goldIr)),
+    mkCard('c-silverIr', 'silver',
+      'نقره ۹۹۹', 'Silver 999 · IR',
+      fmtT(p.silverIr), 'تومان', pill(ch.silverIr)),
+  ].join('');
+
+  // ── Render metals ──
+  document.getElementById('g-met').innerHTML = [
+    mkCard('c-xau', 'gold',   'طلا',       'XAU · اونس', fmtD(p.xau),      '', pill(ch.xau)),
+    mkCard('c-xag', 'silver', 'نقره',      'XAG · اونس', fmtD(p.xag),      '', pill(ch.xag)),
+    mkCard('c-xpt', 'plat',   'پلاتین',    'XPT · اونس', fmtD(p.xpt),      '', pill(ch.xpt)),
+    mkCard('c-xpd', 'pallad', 'پالادیوم',  'XPD · اونس', fmtD(p.xpd),      '', pill(ch.xpd)),
+    mkCard('c-cu',  'copper', 'مس',        'HG · پوند',  fmtD(p.copper,3),  '', pill(ch.copper)),
+  ].join('');
+
+  // ── BTC ──
+  document.getElementById('btcIrt').textContent = p.btcIrt!=null ? fmtT(p.btcIrt)+' تومان' : '—';
+  document.getElementById('btcUsd').textContent = fmtD(p.btcUsd, 0);
+  document.getElementById('btcPill').innerHTML  = pill(ch.btcUsd);
+
+  // ── USDT ──
+  document.getElementById('g-usdt').innerHTML =
+    mkCard('c-usdt', 'usdt',
+      'تتر / دلار', 'USDT · Tether',
+      fmtT(p.usdt), 'تومان', pill(ch.usdt));
+
+  // ── Oil ──
+  document.getElementById('g-oil').innerHTML =
+    mkCard('c-oil', 'oil',
+      'نفت خام', 'USOIL · بشکه',
+      fmtD(p.oil), '', pill(ch.oil));
+
+  // Mood
+  updateMood(ch);
+
+  // Timestamp
+  const now = new Date();
+  const t = now.toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('ts').textContent = t + ' · آخرین بروزرسانی';
+}
+
+// Set BTC icon in static HTML
+const btcImgEl = document.getElementById('btcImg');
+if (btcImgEl) btcImgEl.src = svgUri('btc');
+
+initSkel();
+loadAll();
+setInterval(loadAll, 60_000);
+</script>
+</body>
+</html>
