@@ -461,16 +461,19 @@ const savePin=()=>{try{localStorage.setItem(PINK,JSON.stringify(pins))}catch{}};
 function pushHist(k,v){if(v==null)return;if(!hist[k])hist[k]=[];const h=hist[k];if(h[h.length-1]!==v)h.push(v);if(h.length>48)h.splice(0,h.length-48)}
 function chg(k,c){const o=prev[k];if(c!=null)prev[k]=c;return(c!=null&&o!=null&&o>0)?((c-o)/o)*100:null}
 
-/* ═══ Robust fetch (proxy chain) ═══ */
+/* ═══ Robust fetch — PARALLEL RACE (direct + proxies at once) ═══ */
 const PROXIES=[u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
   u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
   u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)];
-async function robust(url,ms=11000){
-  const go=(u,t)=>{const c=new AbortController();const id=setTimeout(()=>c.abort(),t);
-    return fetch(u,{signal:c.signal}).then(r=>{clearTimeout(id);if(!r.ok)throw 0;return r.json()})};
-  try{return await go(url,ms)}catch{}
-  for(const p of PROXIES){try{return await go(p(url),ms+4000)}catch{}}
-  return null;
+async function robust(url,ms=9000){
+  const go=u=>{const c=new AbortController();const id=setTimeout(()=>c.abort(),ms);
+    return fetch(u,{signal:c.signal}).then(r=>{if(!r.ok)throw 0;return r.json()}).finally(()=>clearTimeout(id))};
+  // race direct + first 2 proxies simultaneously → fastest working path wins
+  const attempts=[go(url),go(PROXIES[0](url)),go(PROXIES[1](url))];
+  try{return await Promise.any(attempts)}catch{
+    // last resort: 3rd proxy
+    try{return await go(PROXIES[2](url))}catch{return null}
+  }
 }
 
 /* ═══ Extraction ═══ */
@@ -613,16 +616,34 @@ function renderLayout(ch){
 }
 function paint(p,ch,animate){
   const keys=[...new Set([...pins.filter(k=>k!=='btcUsd'),...GROUPS.dom,...GROUPS.met,...GROUPS.usdt,...GROUPS.oil])];
-  for(const key of keys){
+  for(const key of keys)updateOne(key,p,ch,animate);
+}
+/* update a single asset's card(s) — used for incremental rendering */
+function updateOne(key,p,ch,animate){
+  if(ASSETS[key]){
+    const v=p[key];
     document.querySelectorAll(`#pv-${key}`).forEach(el=>{
-      const from=lastP[key],to=p[key];
-      if(animate&&from!=null&&to!=null&&from!==to)countUp(el,from,to,key);else el.textContent=fmtPrice(key,to);
+      const from=lastP[key];
+      if(animate&&from!=null&&v!=null&&from!==v)countUp(el,from,v,key);else el.textContent=fmtPrice(key,v);
     });
     document.querySelectorAll(`#pu-${key}`).forEach(el=>el.textContent=ASSETS[key].usd?'':'تومان');
     document.querySelectorAll(`#pl-${key}`).forEach(el=>el.innerHTML=pill(ch[key]));
     document.querySelectorAll(`#sp-${key}`).forEach(el=>drawSpark(el,hist[key],ACOL[key]));
+    const s=srcUsed[key]||SRC_DEFAULT[key]||'—';
+    document.querySelectorAll(`.card[data-key="${key}"] .src-badge`).forEach(b=>{
+      b.className='src-badge '+(s==='تخمینی'?'est':s==='کش'?'cache':'');
+      b.innerHTML=`<span class="sd"></span>${s}`;
+    });
     flash(key,p,lastP);
   }
+  if(key==='btcUsd'||key==='btcIrt'||key==='usdt')updateBtcCard(p,ch);
+}
+function updateBtcCard(p,ch){
+  document.getElementById('btcImg').src=icUri('btc');
+  document.getElementById('btcIrt').textContent=p.btcIrt!=null?fmtT(p.btcIrt)+' تومان':'—';
+  document.getElementById('btcUsd').textContent=p.btcUsd!=null?fmtD(p.btcUsd,0):'—';
+  document.getElementById('btcPill').innerHTML=pill(ch.btcUsd);
+  drawSpark(document.getElementById('btcSpark'),hist.btcUsd,ACOL.btcUsd,{lw:2.4,glow:7,dot:3});
 }
 
 /* ═══ Mood ═══ */
@@ -724,71 +745,75 @@ async function triggerRefresh(animate){
 }
 requestAnimationFrame(timerLoop);
 
-/* ═══ Main load (multi-source) ═══ */
+/* ═══ Main load — INCREMENTAL (each price paints as soon as it arrives) ═══ */
+const ALL_KEYS=['goldIr','silverIr','xau','xag','xpt','xpd','copper','usdt','oil','btcIrt','btcUsd'];
+const U={
+  talasea:'https://api.talasea.ir/api/market/getGoldPrice',
+  digi:'https://api.digikala.com/non-inventory/v1/prices/',
+  xau:'https://api.gold-api.com/price/XAU', xag:'https://api.gold-api.com/price/XAG',
+  xpt:'https://api.gold-api.com/price/XPT', xpd:'https://api.gold-api.com/price/XPD', hg:'https://api.gold-api.com/price/HG',
+  btcIrt:'https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCIRT&source=nobitex_spot',
+  btcUsd:'https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCUSDT&source=nobitex_spot',
+  usdt:'https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=USDTIRT&source=nobitex_spot',
+  oil:'https://api.bitpin.ir/v4/mth/matches/USOON_USDT/',
+  nobitex:'https://api.nobitex.ir/market/stats?srcCurrency=btc,usdt&dstCurrency=rls',
+  coinbase:'https://api.coinbase.com/v2/prices/BTC-USD/spot',
+};
+
 async function loadAll(animate=true){
-  const R=await Promise.allSettled([
-    robust('https://api.talasea.ir/api/market/getGoldPrice'),                          //0
-    robust('https://api.digikala.com/non-inventory/v1/prices/'),                       //1
-    robust('https://api.gold-api.com/price/XAU'),                                      //2
-    robust('https://api.gold-api.com/price/XAG'),                                      //3
-    robust('https://api.gold-api.com/price/XPT'),                                      //4
-    robust('https://api.gold-api.com/price/XPD'),                                      //5
-    robust('https://api.gold-api.com/price/HG'),                                       //6
-    robust('https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCIRT&source=nobitex_spot'),  //7
-    robust('https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCUSDT&source=nobitex_spot'), //8
-    robust('https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=USDTIRT&source=nobitex_spot'), //9
-    robust('https://api.bitpin.ir/v4/mth/matches/USOON_USDT/'),                        //10
-    robust('https://api.nobitex.ir/market/stats?srcCurrency=btc,usdt&dstCurrency=rls'),//11 backup IRT
-    robust('https://api.coinbase.com/v2/prices/BTC-USD/spot'),                         //12 backup BTC-USD
-  ]);
-  const g=i=>R[i].status==='fulfilled'?R[i].value:null;
+  const base={...prev}; // last cycle's prices → for live % change
+  const chgLive=(k,v)=>(v!=null&&base[k]!=null&&base[k]>0)?((v-base[k])/base[k])*100:null;
   srcUsed={};
-  const p={
-    goldIr:scale(exIR(g(0)),5e6,1e8),silverIr:scale(exSilver(g(1)),1e5,5e6),
-    xau:g(2)?.price??null,xag:g(3)?.price??null,xpt:g(4)?.price??null,xpd:g(5)?.price??null,copper:g(6)?.price??null,
-    btcIrt:exBit(g(7)),btcUsd:exBit(g(8)),usdt:exBit(g(9)),oil:exOil(g(10)),
+  const p={};
+
+  // ── 1) INSTANT: show cached numbers immediately (no waiting) ──
+  for(const k of ALL_KEYS)if(cache[k]!=null){p[k]=cache[k];srcUsed[k]='کش'}
+  renderLayout(prevChg);
+  for(const k of ALL_KEYS)prevChg[k]=chgLive(k,p[k]);
+  paint(p,prevChg,false);updateBtcCard(p,prevChg);updateMood(prevChg);computePulse(prevChg);
+
+  // ── 2) each source updates its own card the moment it lands ──
+  const arrive=(key,v,src)=>{
+    if(v==null)return;
+    p[key]=v;cache[key]=v;srcUsed[key]=src;pushHist(key,v);
+    prevChg[key]=chgLive(key,v);
+    updateOne(key,p,prevChg,animate);
+    updateMood(prevChg);computePulse(prevChg);
+    tryDerived();
   };
-  // record primary sources that succeeded
-  for(const k of Object.keys(p))if(p[k]!=null)srcUsed[k]=SRC_DEFAULT[k];
+  const tryDerived=()=>{
+    const OZ=31.1035;
+    if(p.silverIr==null&&p.xag!=null&&p.usdt!=null)arrive('silverIr',Math.round(p.xag/OZ*p.usdt),'تخمینی');
+    if(p.goldIr==null&&p.xau!=null&&p.usdt!=null)arrive('goldIr',Math.round(p.xau/OZ*0.750*p.usdt),'تخمینی');
+  };
 
-  // ── backups ──
-  const nb=g(11)?.stats;
-  if(p.btcIrt==null&&nb?.['btc-rls']?.latest){p.btcIrt=Math.round(+nb['btc-rls'].latest/10);srcUsed.btcIrt='نوبیتکس'}
-  if(p.usdt==null&&nb?.['usdt-rls']?.latest){p.usdt=Math.round(+nb['usdt-rls'].latest/10);srcUsed.usdt='نوبیتکس'}
-  const cb=g(12)?.data?.amount;
-  if(p.btcUsd==null&&cb){p.btcUsd=Math.round(+cb);srcUsed.btcUsd='Coinbase'}
+  const jobs=[
+    robust(U.talasea).then(o=>arrive('goldIr',scale(exIR(o),5e6,1e8),'طلاسی')),
+    robust(U.digi).then(o=>arrive('silverIr',scale(exSilver(o),1e5,5e6),'دیجی‌کالا')),
+    robust(U.xau).then(o=>arrive('xau',o?.price??null,'Gold-API')),
+    robust(U.xag).then(o=>arrive('xag',o?.price??null,'Gold-API')),
+    robust(U.xpt).then(o=>arrive('xpt',o?.price??null,'Gold-API')),
+    robust(U.xpd).then(o=>arrive('xpd',o?.price??null,'Gold-API')),
+    robust(U.hg).then(o=>arrive('copper',o?.price??null,'Gold-API')),
+    robust(U.btcIrt).then(o=>arrive('btcIrt',exBit(o),'نوبیتکس')),
+    robust(U.btcUsd).then(o=>arrive('btcUsd',exBit(o),'نوبیتکس')),
+    robust(U.usdt).then(o=>arrive('usdt',exBit(o),'نوبیتکس')),
+    robust(U.oil).then(o=>arrive('oil',exOil(o),'بیت‌پین')),
+    // backups (fill only if primary still missing when they land)
+    robust(U.nobitex).then(o=>{const nb=o?.stats;
+      if(p.btcIrt==null&&nb?.['btc-rls']?.latest)arrive('btcIrt',Math.round(+nb['btc-rls'].latest/10),'نوبیتکس');
+      if(p.usdt==null&&nb?.['usdt-rls']?.latest)arrive('usdt',Math.round(+nb['usdt-rls'].latest/10),'نوبیتکس');}),
+    robust(U.coinbase).then(o=>{if(p.btcUsd==null&&o?.data?.amount)arrive('btcUsd',Math.round(+o.data.amount),'Coinbase');}),
+  ];
+  await Promise.allSettled(jobs);
+  tryDerived();
 
-  // ── derived fallbacks (solve missing silver/gold) ──
-  const OZ=31.1035;
-  if(p.silverIr==null&&p.xag!=null&&p.usdt!=null){p.silverIr=Math.round((p.xag/OZ)*p.usdt);srcUsed.silverIr='تخمینی'}
-  if(p.goldIr==null&&p.xau!=null&&p.usdt!=null){p.goldIr=Math.round((p.xau/OZ)*0.750*p.usdt);srcUsed.goldIr='تخمینی'}
-
-  // ── cache fill ──
-  let missing=0;
-  for(const k of Object.keys(p)){
-    if(p[k]==null&&cache[k]!=null){p[k]=cache[k];srcUsed[k]='کش';missing++}
-    if(p[k]!=null)cache[k]=p[k];
-  }
-  saveC();
-  for(const k of Object.keys(p))pushHist(k,p[k]);saveH();
-
-  const ch={};for(const k of Object.keys(p))ch[k]=chg(k,p[k]);saveP();prevChg=ch;
-
-  renderLayout(ch);paint(p,ch,animate);
-
-  // BTC card
-  document.getElementById('btcImg').src=icUri('btc');
-  document.getElementById('btcIrt').textContent=p.btcIrt!=null?fmtT(p.btcIrt)+' تومان':'—';
-  document.getElementById('btcUsd').textContent=fmtD(p.btcUsd,0);
-  document.getElementById('btcPill').innerHTML=pill(ch.btcUsd);
-  drawSpark(document.getElementById('btcSpark'),hist.btcUsd,ACOL.btcUsd,{lw:2.4,glow:7,dot:3});
-
-  updateMood(ch);computePulse(ch);
-
-  if(animate){const moved=Object.keys(p).some(k=>lastP[k]!=null&&p[k]!=null&&Math.abs((p[k]-lastP[k])/lastP[k])>0.0008);if(moved)hapticN('success')}
+  // ── 3) finalize ──
+  saveC();saveH();
+  prev={...p};saveP();
+  if(animate){const moved=ALL_KEYS.some(k=>lastP[k]!=null&&p[k]!=null&&Math.abs((p[k]-lastP[k])/lastP[k])>0.0008);if(moved)hapticN('success')}
   lastP={...p};
-  if(missing>3)showToast();
-
+  if(ALL_KEYS.filter(k=>p[k]==null).length>3)showToast();
   const now=new Date();
   document.getElementById('ftTs').textContent='آخرین بروزرسانی: '+now.toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'});
 }
