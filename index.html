@@ -85,28 +85,21 @@
     /* ═══════════ PULSE CARD ═══════════ */
     .pulse-card{
       margin:12px 18px 0;position:relative;border-radius:var(--r-card);
-      background:linear-gradient(165deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
-      border:1px solid var(--hairline);padding:15px 17px 8px;overflow:hidden;
+      background:linear-gradient(165deg,#0e1017,#0a0b11);
+      border:1px solid var(--hairline);padding:14px 17px 8px;overflow:hidden;
       box-shadow:var(--sh-card);
     }
     .pulse-top{display:flex;align-items:flex-start;justify-content:space-between;position:relative;z-index:2}
     .pulse-info{display:flex;flex-direction:column;gap:4px}
     .pulse-label{font-size:10px;color:var(--tx-3);font-weight:600;letter-spacing:.4px}
     .pulse-title{font-size:18px;font-weight:800;line-height:1}
+    .pulse-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
     .pulse-pct{font-size:13px;font-weight:800;padding:5px 11px;border-radius:var(--r-pill);direction:ltr}
     .pulse-pct.up{color:var(--up);background:var(--up-bg)}
     .pulse-pct.dn{color:var(--dn);background:var(--dn-bg)}
     .pulse-pct.fl{color:var(--tx-2);background:var(--surface-2)}
-
-    .pulse-viz{position:relative;width:100%;height:78px;margin-top:6px}
-    .pulse-viz canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-    .pulse-avatars{position:absolute;inset:0;pointer-events:none}
-    .pavatar{position:absolute;width:23px;height:23px;border-radius:50%;
-      transform:translate(-50%,-50%);transition:left .6s var(--ease),top .6s var(--ease)}
-    .pavatar img{width:100%;height:100%;border-radius:50%;display:block}
-    .pavatar::after{content:'';position:absolute;inset:-2px;border-radius:50%;
-      border:1.5px solid var(--ring);box-shadow:0 0 8px -1px var(--ring)}
-    .pavatar.up{--ring:var(--up)} .pavatar.dn{--ring:var(--dn)}
+    .pulse-bpm{font-size:9.5px;font-weight:700;color:var(--tx-3);letter-spacing:.3px;direction:rtl}
+    .ecg{position:relative;z-index:1;width:100%;height:70px;display:block;margin-top:4px}
 
     /* ═══════════ TOOLBAR ═══════════ */
     .toolbar{display:flex;align-items:center;gap:9px;padding:16px 18px 2px}
@@ -290,19 +283,19 @@
   </div>
 </header>
 
-<!-- PULSE -->
+<!-- MARKET PULSE MONITOR -->
 <div class="pulse-card">
   <div class="pulse-top">
     <div class="pulse-info">
       <span class="pulse-label">حال بازار</span>
       <span class="pulse-title" id="moodTitle">در حال سنجش…</span>
     </div>
-    <span class="pulse-pct fl" id="moodAvg">—</span>
+    <div class="pulse-right">
+      <span class="pulse-pct fl" id="moodAvg">—</span>
+      <span class="pulse-bpm" id="moodBpm"></span>
+    </div>
   </div>
-  <div class="pulse-viz">
-    <canvas id="pulseCanvas"></canvas>
-    <div class="pulse-avatars" id="pulseAvatars"></div>
-  </div>
+  <canvas class="ecg" id="ecg"></canvas>
 </div>
 
 <!-- TOOLBAR -->
@@ -506,59 +499,81 @@ function drawSpark(cv,data,color,opts={}){
 }
 const ACOL={goldIr:'#ecca6e',silverIr:'#c5cede',xau:'#ecca6e',xag:'#c5cede',xpt:'#8db5e0',xpd:'#54c6c2',copper:'#e0916a',usdt:'#26a17b',oil:'#37c2b0',btcUsd:'#f7931a'};
 
-/* ═══ PULSE viz (heartbeat + avatars) ═══ */
-const PULSE_KEYS=['goldIr','xau','xag','xpt','btcUsd','usdt','oil'];
-let pulsePts=[],pulseColor='#8b92a6',sweep=0,bgPhase=0;
-function computePulse(ch){
-  const cv=document.getElementById('pulseCanvas');if(!cv)return;
-  const w=cv.clientWidth,h=cv.clientHeight;
-  const keys=PULSE_KEYS.filter(k=>ch[k]!=null&&!isNaN(ch[k]));
-  if(keys.length<2){pulsePts=[];document.getElementById('pulseAvatars').innerHTML='';return}
-  const maxAbs=Math.max(0.35,...keys.map(k=>Math.abs(ch[k])));
-  const padX=22,padY=18;
-  pulsePts=keys.map((k,i)=>{
-    const x=padX+(i/(keys.length-1))*(w-2*padX);
-    const norm=Math.max(-1,Math.min(1,ch[k]/maxAbs));
-    const y=h/2 - norm*(h/2-padY);
-    return{k,x,y,ch:ch[k],w,h};
-  });
-  // avatars
-  document.getElementById('pulseAvatars').innerHTML=pulsePts.map(p=>{
-    const up=p.ch>=0;
-    return`<div class="pavatar ${up?'up':'dn'}" style="left:${p.x/w*100}%;top:${p.y/h*100}%"><img src="${icUri(ASSETS[p.k].ic)}"/></div>`;
-  }).join('');
+/* ═══ MARKET PULSE — real heart-rate monitor (EKG) ═══ */
+// PQRST complex via gaussian bumps, p in [0,1)
+const _g=(p,c,w,h)=>h*Math.exp(-((p-c)*(p-c))/(2*w*w));
+function ekgWave(p){
+  return _g(p,0.16,0.024,0.16)   // P
+       - _g(p,0.205,0.011,0.16)  // Q
+       + _g(p,0.235,0.012,1.00)  // R (tall spike)
+       - _g(p,0.265,0.013,0.32)  // S
+       + _g(p,0.37,0.043,0.26);  // T
 }
-function smoothPath(ctx,pts){ctx.moveTo(pts[0].x,pts[0].y);for(let i=0;i<pts.length-1;i++){const xc=(pts[i].x+pts[i+1].x)/2,yc=(pts[i].y+pts[i+1].y)/2;ctx.quadraticCurveTo(pts[i].x,pts[i].y,xc,yc)}ctx.lineTo(pts[pts.length-1].x,pts[pts.length-1].y)}
-function ptAlong(pts,t){const seg=(pts.length-1)*t;const i=Math.min(pts.length-2,Math.floor(seg));const f=seg-i;return{x:pts[i].x+(pts[i+1].x-pts[i].x)*f,y:pts[i].y+(pts[i+1].y-pts[i].y)*f}}
-function pulseLoop(){
-  const cv=document.getElementById('pulseCanvas');if(!cv){requestAnimationFrame(pulseLoop);return}
+let ekgColor='#8b92a6', ekgColorTo='#8b92a6';
+let ekgAmp=0.30, ekgAmpTo=0.30;      // amplitude scale
+let ekgBeats=2.2, ekgBeatsTo=2.2;    // beats across width
+let ekgSpeed=0.0042, ekgSpeedTo=0.0042;
+let ekgOff=0;
+function setPulse(avg){
+  if(avg==null||isNaN(avg)){ekgColorTo='#8b92a6';ekgAmpTo=0.26;ekgBeatsTo=2.0;ekgSpeedTo=0.0034;return}
+  if(avg>0.3){ekgColorTo='#2fd98a';ekgAmpTo=Math.min(0.46,0.32+avg*0.05);ekgBeatsTo=2.6;ekgSpeedTo=0.0058}
+  else if(avg<-0.3){ekgColorTo='#ff647c';ekgAmpTo=Math.min(0.44,0.30+Math.abs(avg)*0.05);ekgBeatsTo=2.4;ekgSpeedTo=0.005}
+  else{ekgColorTo='#e8c873';ekgAmpTo=0.28;ekgBeatsTo=2.0;ekgSpeedTo=0.0038}
+}
+function mix(a,b,t){return a+(b-a)*t}
+function mixHex(h1,h2,t){const a=parseInt(h1.slice(1),16),b=parseInt(h2.slice(1),16);
+  const r=Math.round(mix((a>>16)&255,(b>>16)&255,t)),g=Math.round(mix((a>>8)&255,(b>>8)&255,t)),bl=Math.round(mix(a&255,b&255,t));
+  return`rgb(${r},${g},${bl})`}
+let _cr=139,_cg=146,_cb=166; // current color rgb (start neutral)
+function ekgLoop(){
+  const cv=document.getElementById('ecg');if(!cv){requestAnimationFrame(ekgLoop);return}
   const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
   if(cv.width!==w*dpr){cv.width=w*dpr;cv.height=h*dpr}
   const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-  // faint background heartbeat (medical, scrolling)
-  bgPhase+=0.015;
-  ctx.beginPath();
-  for(let x=0;x<=w;x+=2){const t=x/w;let y=h/2+Math.sin(t*10+bgPhase)*1.2;
-    const beat=t-((bgPhase*0.1)%1.25-0.12),bd=Math.abs(beat);
-    if(bd<0.05){const k=(0.05-bd)/0.05;y=h/2-Math.sin(beat*46)*h*0.16*k}
-    ctx.lineTo(x,y)}
-  ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=1.4;ctx.stroke();
-  // data pulse line
-  if(pulsePts.length>1){
-    const grad=ctx.createLinearGradient(0,0,w,0);
-    grad.addColorStop(0,hexA(pulseColor,.25));grad.addColorStop(.5,pulseColor);grad.addColorStop(1,hexA(pulseColor,.25));
-    ctx.beginPath();smoothPath(ctx,pulsePts);ctx.strokeStyle=grad;ctx.lineWidth=2.2;ctx.lineJoin='round';ctx.lineCap='round';
-    ctx.shadowColor=pulseColor;ctx.shadowBlur=7;ctx.stroke();ctx.shadowBlur=0;
-    // moving sweep glow
-    sweep=(sweep+0.0045)%1;const sp=ptAlong(pulsePts,sweep);
-    const rg=ctx.createRadialGradient(sp.x,sp.y,0,sp.x,sp.y,14);
-    rg.addColorStop(0,hexA(pulseColor,.5));rg.addColorStop(1,hexA(pulseColor,0));
-    ctx.beginPath();ctx.arc(sp.x,sp.y,14,0,7);ctx.fillStyle=rg;ctx.fill();
-    ctx.beginPath();ctx.arc(sp.x,sp.y,2.6,0,7);ctx.fillStyle='#fff';ctx.shadowColor=pulseColor;ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0;
+
+  // ease params
+  ekgAmp+=(ekgAmpTo-ekgAmp)*0.05;ekgBeats+=(ekgBeatsTo-ekgBeats)*0.05;ekgSpeed+=(ekgSpeedTo-ekgSpeed)*0.05;
+  const tgt=parseInt(ekgColorTo.slice(1),16);
+  _cr+=(((tgt>>16)&255)-_cr)*0.05;_cg+=(((tgt>>8)&255)-_cg)*0.05;_cb+=((tgt&255)-_cb)*0.05;
+  const col=`rgb(${_cr|0},${_cg|0},${_cb|0})`;
+  const colA=(a)=>`rgba(${_cr|0},${_cg|0},${_cb|0},${a})`;
+
+  // ── monitor grid ──
+  ctx.lineWidth=1;ctx.strokeStyle='rgba(255,255,255,.035)';
+  const gs=Math.max(14,w/16);
+  for(let x=w% gs;x<w;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke()}
+  for(let y=gs/2;y<h;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}
+
+  ekgOff+=ekgSpeed;
+  const mid=h*0.55, amp=h*ekgAmp;
+  // sample waveform across width (scrolls right→left, newest at right)
+  const ys=[];
+  for(let xi=0;xi<=w;xi+=2){
+    const phase=(xi/w)*ekgBeats - ekgOff*ekgBeats;
+    const fp=((phase%1)+1)%1;
+    ys.push([xi, mid - ekgWave(fp)*amp]);
   }
-  requestAnimationFrame(pulseLoop);
+  // glow underlay
+  ctx.beginPath();ys.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+  ctx.strokeStyle=colA(.18);ctx.lineWidth=5;ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.shadowColor=col;ctx.shadowBlur=14;ctx.stroke();ctx.shadowBlur=0;
+  // main trace with left→right fade (older dimmer)
+  for(let i=1;i<ys.length;i++){
+    const t=i/ys.length;             // 0 left(old) → 1 right(new)
+    ctx.beginPath();ctx.moveTo(ys[i-1][0],ys[i-1][1]);ctx.lineTo(ys[i][0],ys[i][1]);
+    ctx.strokeStyle=colA(0.25+0.75*t);ctx.lineWidth=2.1;ctx.lineCap='round';ctx.stroke();
+  }
+  // leading dot at right edge
+  const head=ys[ys.length-1];
+  ctx.beginPath();ctx.arc(head[0]-1,head[1],3.2,0,7);ctx.fillStyle='#fff';
+  ctx.shadowColor=col;ctx.shadowBlur=12;ctx.fill();ctx.shadowBlur=0;
+  ctx.beginPath();ctx.arc(head[0]-1,head[1],6,0,7);ctx.fillStyle=colA(.25);ctx.fill();
+
+  requestAnimationFrame(ekgLoop);
 }
-requestAnimationFrame(pulseLoop);
+requestAnimationFrame(ekgLoop);
+// compatibility shim (updateMood calls setGauge)
+function setGauge(avg){setPulse(avg)}
 
 /* ═══ Count-up ═══ */
 function countUp(el,from,to,key){
@@ -649,15 +664,16 @@ function updateBtcCard(p,ch){
 /* ═══ Mood ═══ */
 function updateMood(ch){
   const vs=Object.values(ch).filter(v=>v!=null&&!isNaN(v));
-  const mt=document.getElementById('moodTitle'),ma=document.getElementById('moodAvg');
-  if(!vs.length){mt.textContent='بازار آرومه';ma.textContent='—';ma.className='pulse-pct fl';pulseColor='#8b92a6';return}
-  const avg=vs.reduce((a,b)=>a+b,0)/vs.length;let title,cls,col;
-  if(avg>1.2){title='بازار سرحاله';cls='up';col='#2fd98a'}
-  else if(avg>0.3){title='روند مثبت';cls='up';col='#2fd98a'}
-  else if(avg<-1.2){title='فشار فروش';cls='dn';col='#ff647c'}
-  else if(avg<-0.3){title='روند نزولی';cls='dn';col='#ff647c'}
-  else{title='بازار آرومه';cls='fl';col='#8b92a6'}
-  mt.textContent=title;ma.textContent=(avg>=0?'+':'')+avg.toFixed(2)+'%';ma.className='pulse-pct '+cls;pulseColor=col;
+  const mt=document.getElementById('moodTitle'),ma=document.getElementById('moodAvg'),mb=document.getElementById('moodBpm');
+  if(!vs.length){mt.textContent='بازار آرومه';ma.textContent='—';ma.className='pulse-pct fl';mb.textContent='';setPulse(null);return}
+  const avg=vs.reduce((a,b)=>a+b,0)/vs.length;let title,cls,bpm;
+  if(avg>1.2)title='بازار سرحاله',cls='up',bpm='نبض قوی';
+  else if(avg>0.3)title='روند مثبت',cls='up',bpm='نبض پرشتاب';
+  else if(avg<-1.2)title='فشار فروش',cls='dn',bpm='نبض پرنوسان';
+  else if(avg<-0.3)title='روند نزولی',cls='dn',bpm='نبض کند';
+  else title='بازار آرومه',cls='fl',bpm='نبض منظم';
+  mt.textContent=title;ma.textContent=(avg>=0?'+':'')+avg.toFixed(2)+'%';ma.className='pulse-pct '+cls;mb.textContent=bpm;
+  setPulse(avg);
 }
 
 /* ═══ Detail sheet ═══ */
@@ -770,7 +786,7 @@ async function loadAll(animate=true){
   for(const k of ALL_KEYS)if(cache[k]!=null){p[k]=cache[k];srcUsed[k]='کش'}
   renderLayout(prevChg);
   for(const k of ALL_KEYS)prevChg[k]=chgLive(k,p[k]);
-  paint(p,prevChg,false);updateBtcCard(p,prevChg);updateMood(prevChg);computePulse(prevChg);
+  paint(p,prevChg,false);updateBtcCard(p,prevChg);updateMood(prevChg);
 
   // ── 2) each source updates its own card the moment it lands ──
   const arrive=(key,v,src)=>{
@@ -778,7 +794,7 @@ async function loadAll(animate=true){
     p[key]=v;cache[key]=v;srcUsed[key]=src;pushHist(key,v);
     prevChg[key]=chgLive(key,v);
     updateOne(key,p,prevChg,animate);
-    updateMood(prevChg);computePulse(prevChg);
+    updateMood(prevChg);
     tryDerived();
   };
   const tryDerived=()=>{
