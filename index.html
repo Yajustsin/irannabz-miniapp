@@ -717,38 +717,52 @@ function openDetail(key){
   showSheet('detailSheet');
 }
 
-/* ═══ News (Persian feeds via rss2json) ═══ */
-const FEEDS={talasea:'https://www.talasea.ir/feed',arz:'https://arzdigital.com/feed/'};
-const NEWS_CFG={
-  goldIr:{f:'talasea',k:'طلا'},xau:{f:'talasea',k:'طلا'},
-  silverIr:{f:'talasea',k:'نقره'},xag:{f:'talasea',k:'نقره'},
-  xpt:{f:'talasea',k:'پلاتین'},xpd:{f:'talasea',k:'پالادیوم'},
-  copper:{f:'talasea',k:'مس'},oil:{f:'talasea',k:'نفت'},
-  usdt:{f:'talasea',k:'دلار'},btcUsd:{f:'arz',k:'بیت'},
+/* ═══ News — POOL from multiple Persian sources, matched per asset ═══ */
+const POOL_FEEDS={
+  talasea:'https://www.talasea.ir/feed',        // طلا و فلزات گران‌بها
+  arz:'https://arzdigital.com/feed/',           // رمزارز
+  eco:'https://www.eghtesadonline.com/rss',     // اقتصاد عمومی (دلار/نفت/بازار)
+  mehr:'https://www.mehrnews.com/rss/tp/26',    // اقتصاد مهر
 };
-const feedCache={};
-async function getFeed(name){
-  const c=feedCache[name];
-  if(c&&Date.now()-c.ts<600000)return c.items;
-  try{
-    const ac=new AbortController();const id=setTimeout(()=>ac.abort(),9000);
-    const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(FEEDS[name]),{signal:ac.signal});
+// per asset: keywords + primary feed + whether gold-feed fallback is allowed
+const ASSET_NEWS={
+  goldIr:{kw:['طلا'],fb:'talasea'},
+  xau:{kw:['طلا','انس'],fb:'talasea'},
+  silverIr:{kw:['نقره'],fb:null},
+  xag:{kw:['نقره'],fb:null},
+  xpt:{kw:['پلاتین'],fb:null},
+  xpd:{kw:['پالادیوم'],fb:null},
+  copper:{kw:['قیمت مس','فلز مس','مس جهانی'],fb:null},
+  oil:{kw:['نفت','اوپک','بشکه'],fb:null},
+  usdt:{kw:['نرخ دلار','قیمت دلار','بازار ارز','دلار آزاد','صرافی','نرخ ارز'],fb:null},
+  btcUsd:{kw:['بیت‌کوین','بیت کوین','بیتکوین','رمزارز','ارز دیجیتال','کریپتو'],fb:'arz'},
+};
+let poolCache=null,poolTs=0;
+async function getPool(){
+  if(poolCache&&Date.now()-poolTs<600000)return poolCache;
+  const one=async(name,url)=>{try{const c=new AbortController();const id=setTimeout(()=>c.abort(),9000);
+    const r=await fetch('https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(url),{signal:c.signal});
     clearTimeout(id);const j=await r.json();
-    const items=(j.items||[]).map(i=>({title:(i.title||'').trim(),link:i.link}));
-    if(items.length)feedCache[name]={items,ts:Date.now()};
-    return items;
-  }catch{return c?.items||[]}
+    return (j.items||[]).map(i=>({title:(i.title||'').trim(),link:i.link,feed:name}));
+  }catch{return []}};
+  const all=await Promise.all(Object.entries(POOL_FEEDS).map(([n,u])=>one(n,u)));
+  const pool=[].concat(...all);
+  if(pool.length){poolCache=pool;poolTs=Date.now()}
+  return poolCache||[];
 }
 let newsTok=0;
 async function loadNewsInto(key){
-  const cfg=NEWS_CFG[key];const box=document.getElementById('dNews'),tt=document.getElementById('dNewsT');
+  const cfg=ASSET_NEWS[key],box=document.getElementById('dNews'),tt=document.getElementById('dNewsT');
   box.classList.remove('has');box.dataset.link='';tt.textContent='در حال دریافت آخرین خبر…';
   const tok=++newsTok;
   if(!cfg){tt.textContent='خبری یافت نشد';return}
-  const items=await getFeed(cfg.f);
+  const pool=await getPool();
   if(tok!==newsTok)return;
-  if(!items.length){tt.textContent='خبری در دسترس نیست';return}
-  const m=items.find(i=>i.title.includes(cfg.k))||items[0];
+  if(!pool.length){tt.textContent='خبری در دسترس نیست';return}
+  const matches=pool.filter(i=>cfg.kw.some(k=>i.title.includes(k)));
+  let m=matches.find(i=>i.feed===cfg.fb)||matches[0];
+  if(!m&&cfg.fb)m=pool.find(i=>i.feed===cfg.fb);   // category fallback (only when allowed)
+  if(!m){tt.textContent='خبر اختصاصی برای این مورد یافت نشد';return}
   tt.textContent=m.title;box.dataset.link=m.link||'';if(m.link)box.classList.add('has');
 }
 document.getElementById('dNews').onclick=()=>{
