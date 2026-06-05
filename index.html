@@ -847,6 +847,7 @@ const U={
   oil:'https://api.bitpin.ir/v4/mth/matches/USOON_USDT/',
   nobitex:'https://api.nobitex.ir/market/stats?srcCurrency=btc,usdt&dstCurrency=rls',
   coinbase:'https://api.coinbase.com/v2/prices/BTC-USD/spot',
+  gecko:'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,pax-gold,tether-gold&vs_currencies=usd',
 };
 
 async function loadAll(animate=true){
@@ -872,8 +873,13 @@ async function loadAll(animate=true){
   };
   const tryDerived=()=>{
     const OZ=31.1035;
+    // domestic metals from global ounce × dollar
     if(p.silverIr==null&&p.xag!=null&&p.usdt!=null)arrive('silverIr',Math.round(p.xag/OZ*p.usdt),'انس جهانی');
     if(p.goldIr==null&&p.xau!=null&&p.usdt!=null)arrive('goldIr',Math.round(p.xau/OZ*0.750*p.usdt),'انس جهانی');
+    // crypto/dollar cross-derivation: any two give the third
+    if(p.usdt==null&&p.btcIrt!=null&&p.btcUsd!=null&&p.btcUsd>0)arrive('usdt',Math.round(p.btcIrt/p.btcUsd),'محاسبه از BTC');
+    if(p.btcIrt==null&&p.btcUsd!=null&&p.usdt!=null)arrive('btcIrt',Math.round(p.btcUsd*p.usdt),'محاسبه از دلار');
+    if(p.btcUsd==null&&p.btcIrt!=null&&p.usdt!=null&&p.usdt>0)arrive('btcUsd',Math.round(p.btcIrt/p.usdt),'محاسبه از تومان');
   };
 
   const jobs=[
@@ -893,9 +899,16 @@ async function loadAll(animate=true){
       if(p.btcIrt==null&&nb?.['btc-rls']?.latest)arrive('btcIrt',Math.round(+nb['btc-rls'].latest/10),'نوبیتکس');
       if(p.usdt==null&&nb?.['usdt-rls']?.latest)arrive('usdt',Math.round(+nb['usdt-rls'].latest/10),'نوبیتکس');}),
     robust(U.coinbase).then(o=>{if(p.btcUsd==null&&o?.data?.amount)arrive('btcUsd',Math.round(+o.data.amount),'Coinbase');}),
+    robust(U.gecko).then(o=>{
+      if(p.btcUsd==null&&o?.bitcoin?.usd)arrive('btcUsd',Math.round(o.bitcoin.usd),'CoinGecko');
+      const g=o?.['pax-gold']?.usd??o?.['tether-gold']?.usd;
+      if(p.xau==null&&g)arrive('xau',Math.round(g*100)/100,'CoinGecko');
+    }),
   ];
   await Promise.allSettled(jobs);
   tryDerived();
+  // final pass: re-run derivations a couple times in case sources settled out of order
+  tryDerived();tryDerived();
 
   // ── 3) finalize ──
   saveC();saveH();
