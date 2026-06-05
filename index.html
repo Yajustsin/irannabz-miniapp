@@ -483,19 +483,25 @@ const savePin=()=>{try{localStorage.setItem(PINK,JSON.stringify(pins))}catch{}};
 function pushHist(k,v){if(v==null)return;if(!hist[k])hist[k]=[];const h=hist[k];if(h[h.length-1]!==v)h.push(v);if(h.length>48)h.splice(0,h.length-48)}
 function chg(k,c){const o=prev[k];if(c!=null)prev[k]=c;return(c!=null&&o!=null&&o>0)?((c-o)/o)*100:null}
 
-/* ═══ Robust fetch — PARALLEL RACE (direct + proxies at once) ═══ */
+/* ═══ Robust fetch — smart: CORS-open hosts go DIRECT (no proxy load) ═══ */
 const PROXIES=[u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
   u=>'https://corsproxy.io/?url='+encodeURIComponent(u),
-  u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u)];
+  u=>'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u),
+  u=>'https://thingproxy.freeboard.io/fetch/'+u];
+const DIRECT_OK=/gold-api\.com|coinbase\.com|coingecko\.com|cnbc\.com/;
 async function robust(url,ms=9000){
   const go=u=>{const c=new AbortController();const id=setTimeout(()=>c.abort(),ms);
     return fetch(u,{signal:c.signal}).then(r=>{if(!r.ok)throw 0;return r.json()}).finally(()=>clearTimeout(id))};
-  // race direct + first 2 proxies simultaneously → fastest working path wins
-  const attempts=[go(url),go(PROXIES[0](url)),go(PROXIES[1](url))];
-  try{return await Promise.any(attempts)}catch{
-    // last resort: 3rd proxy
-    try{return await go(PROXIES[2](url))}catch{return null}
+  if(DIRECT_OK.test(url)){
+    // CORS-open → direct first (fast, zero proxy load); proxies only if it fails
+    try{return await go(url)}catch{}
+    for(const p of PROXIES.slice(0,2)){try{return await go(p(url))}catch{}}
+    return null;
   }
+  // needs a proxy → race direct + 2 proxies, then fall through to the rest
+  try{return await Promise.any([go(url),go(PROXIES[0](url)),go(PROXIES[1](url))])}catch{}
+  for(const p of PROXIES.slice(2)){try{return await go(p(url))}catch{}}
+  return null;
 }
 
 /* ═══ Extraction ═══ */
@@ -933,7 +939,8 @@ async function loadAll(animate=true){
   prev={...p};saveP();
   if(animate){const moved=ALL_KEYS.some(k=>lastP[k]!=null&&p[k]!=null&&Math.abs((p[k]-lastP[k])/lastP[k])>0.0008);if(moved)hapticN('success')}
   lastP={...p};
-  if(ALL_KEYS.filter(k=>p[k]==null).length>3)showToast();
+  // only warn if MANY prices are genuinely unavailable (no fresh + no cache) — i.e. real outage
+  if(ALL_KEYS.filter(k=>p[k]==null).length>=Math.ceil(ALL_KEYS.length*0.6))showToast();
   const now=new Date();
   document.getElementById('ftTs').textContent='آخرین بروزرسانی: '+now.toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'});
 }
