@@ -151,6 +151,8 @@
     .price-line{display:flex;align-items:baseline;gap:5px;margin-bottom:9px;flex-wrap:wrap}
     .price-v{font-size:19px;font-weight:900;letter-spacing:-.5px;direction:ltr;line-height:1}
     .price-u{font-size:10px;color:var(--tx-3);font-weight:600}
+    .rial-line{font-size:11px;color:var(--tx-2);font-weight:700;direction:ltr;margin:-3px 0 7px}
+    .rial-line::after{content:' ریال';font-size:9px;color:var(--tx-3);font-weight:500}
 
     .card-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:8px}
     .pill{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:800;
@@ -450,10 +452,13 @@ const ASSETS={
   xpd:{name:'پالادیوم',sym:'XPD · اونس',ic:'pallad',accent:'#54c6c2',unit:'دلار',dec:2,usd:1},
   copper:{name:'مس',sym:'HG · پوند',ic:'copper',accent:'#e0916a',unit:'دلار',dec:3,usd:1},
   usdt:{name:'تتر / دلار',sym:'USDT · Tether',ic:'usdt',accent:'#26a17b',unit:'تومان',dec:0,calc:'unit'},
-  oil:{name:'نفت خام',sym:'USOIL · بشکه',ic:'oil',accent:'#37c2b0',unit:'دلار',dec:2,usd:1},
+  oilWti:{name:'نفت آمریکا',sym:'WTI · بشکه',ic:'oil',accent:'#37c2b0',unit:'دلار',dec:2,usd:1},
+  oilBrent:{name:'نفت برنت',sym:'Brent · بشکه',ic:'oil',accent:'#5ca8d8',unit:'دلار',dec:2,usd:1},
+  oil:{name:'نفت جهانی',sym:'USOON · بشکه',ic:'oil',accent:'#9b6fff',unit:'دلار',dec:2,usd:1},
+  usoon:{name:'نفت (USOON)',sym:'بازار ایران',ic:'oil',accent:'#b08968',unit:'تومان',dec:0},
   btcUsd:{name:'بیتکوین',sym:'Bitcoin · BTC',ic:'btc',accent:'#f7931a',unit:'دلار',dec:0,usd:1,calc:'unit'},
 };
-const SRC_DEFAULT={goldIr:'طلاسی',silverIr:'دیجی‌کالا',xau:'Gold-API',xag:'Gold-API',xpt:'Gold-API',xpd:'Gold-API',copper:'Gold-API',usdt:'نوبیتکس',oil:'بیت‌پین',btcUsd:'نوبیتکس'};
+const SRC_DEFAULT={goldIr:'طلاسی',silverIr:'دیجی‌کالا',xau:'Gold-API',xag:'Gold-API',xpt:'Gold-API',xpd:'Gold-API',copper:'Gold-API',usdt:'نوبیتکس',oilWti:'CNBC',oilBrent:'CNBC',oil:'بیت‌پین',usoon:'بیت‌پین',btcUsd:'نوبیتکس'};
 
 /* ═══ Helpers ═══ */
 const FA='۰۱۲۳۴۵۶۷۸۹';
@@ -521,7 +526,7 @@ function drawSpark(cv,data,color,opts={}){
   const e=pts[pts.length-1];ctx.beginPath();ctx.arc(e.x,e.y,opts.dot||2.4,0,7);ctx.fillStyle=color;
   ctx.shadowColor=color;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
 }
-const ACOL={goldIr:'#ecca6e',silverIr:'#c5cede',xau:'#ecca6e',xag:'#c5cede',xpt:'#8db5e0',xpd:'#54c6c2',copper:'#e0916a',usdt:'#26a17b',oil:'#37c2b0',btcUsd:'#f7931a'};
+const ACOL={goldIr:'#ecca6e',silverIr:'#c5cede',xau:'#ecca6e',xag:'#c5cede',xpt:'#8db5e0',xpd:'#54c6c2',copper:'#e0916a',usdt:'#26a17b',oilWti:'#37c2b0',oilBrent:'#5ca8d8',oil:'#9b6fff',usoon:'#b08968',btcUsd:'#f7931a'};
 
 /* ═══ MARKET PULSE — real heart-rate monitor (EKG) ═══ */
 // PQRST complex via gaussian bumps, p in [0,1)
@@ -619,11 +624,13 @@ function srcBadge(key){
 /* ═══ Card builders ═══ */
 function cardHTML(key){
   const a=ASSETS[key],pinned=pins.includes(key);
+  const rialLine=key==='usoon'?`<div class="rial-line" id="rial-${key}">—</div>`:'';
   return`<div class="card ${pinned?'pinned':''}" data-key="${key}" style="--accent:${a.accent}">
     <div class="card-head"><img class="asset-ic" src="${icUri(a.ic)}" width="34" height="34"/>
       <div class="asset-meta"><div class="asset-name">${a.name}</div><div class="asset-sub">${a.sym}</div></div>
       <span class="pin-star">★</span></div>
     <div class="price-line"><span class="price-v tnum" id="pv-${key}">—</span><span class="price-u" id="pu-${key}">${a.usd?'':a.unit}</span></div>
+    ${rialLine}
     <div class="card-foot"><span id="pl-${key}">${pill(null)}</span><canvas class="spark" id="sp-${key}"></canvas></div>
     ${srcBadge(key)}
   </div>`;
@@ -637,7 +644,7 @@ function flash(key,p,last){if(last[key]!=null&&p[key]!=null&&last[key]!==p[key])
   document.querySelectorAll(`.card[data-key="${key}"]`).forEach(c=>{c.classList.remove('fl-up','fl-dn');void c.offsetWidth;c.classList.add(p[key]>last[key]?'fl-up':'fl-dn')})}}
 
 /* ═══ Layout ═══ */
-const GROUPS={dom:['goldIr','silverIr'],met:['xau','xag','xpt','xpd','copper'],usdt:['usdt'],oil:['oil']};
+const GROUPS={dom:['goldIr','silverIr'],met:['xau','xag','xpt','xpd','copper'],usdt:['usdt','usoon'],oil:['oilWti','oilBrent','oil']};
 let sortMode='default',lastP={},srcUsed={},prevChg={};
 
 function renderSkeleton(){for(const g in GROUPS)document.getElementById('g-'+g).innerHTML=GROUPS[g].map(skelHTML).join('')}
@@ -668,6 +675,7 @@ function updateOne(key,p,ch,animate){
     document.querySelectorAll(`#pl-${key}`).forEach(el=>el.innerHTML=pill(ch[key]));
     document.querySelectorAll(`#sp-${key}`).forEach(el=>drawSpark(el,hist[key],ACOL[key]));
     document.querySelectorAll(`.card[data-key="${key}"] .src-badge .snm`).forEach(el=>el.textContent=srcOf(key));
+    if(key==='usoon')document.querySelectorAll('#rial-usoon').forEach(el=>el.textContent=p.usoon!=null?toFa(Math.round(p.usoon*10).toLocaleString('en')):'—');
     flash(key,p,lastP);
   }
   if(key==='btcUsd'||key==='btcIrt'||key==='usdt')updateBtcCard(p,ch);
@@ -733,7 +741,10 @@ const ASSET_NEWS={
   xpt:{kw:['پلاتین'],fb:null},
   xpd:{kw:['پالادیوم'],fb:null},
   copper:{kw:['قیمت مس','فلز مس','مس جهانی'],fb:null},
+  oilWti:{kw:['نفت','اوپک','بشکه'],fb:null},
+  oilBrent:{kw:['نفت','برنت','اوپک','بشکه'],fb:null},
   oil:{kw:['نفت','اوپک','بشکه'],fb:null},
+  usoon:{kw:['نفت','اوپک','بشکه'],fb:null},
   usdt:{kw:['نرخ دلار','قیمت دلار','بازار ارز','دلار آزاد','صرافی','نرخ ارز'],fb:null},
   btcUsd:{kw:['بیت‌کوین','بیت کوین','بیتکوین','رمزارز','ارز دیجیتال','کریپتو'],fb:'arz'},
 };
@@ -835,7 +846,8 @@ async function triggerRefresh(animate){
 requestAnimationFrame(timerLoop);
 
 /* ═══ Main load — INCREMENTAL (each price paints as soon as it arrives) ═══ */
-const ALL_KEYS=['goldIr','silverIr','xau','xag','xpt','xpd','copper','usdt','oil','btcIrt','btcUsd'];
+const ALL_KEYS=['goldIr','silverIr','xau','xag','xpt','xpd','copper','usdt','oilWti','oilBrent','oil','usoon','btcIrt','btcUsd'];
+const CNBC=s=>'https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols='+encodeURIComponent(s)+'&requestMethod=itv&exthrs=1&fund=1&output=json';
 const U={
   talasea:'https://api.talasea.ir/api/market/getGoldPrice',
   digi:'https://api.digikala.com/non-inventory/v1/prices/',
@@ -845,10 +857,13 @@ const U={
   btcUsd:'https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=BTCUSDT&source=nobitex_spot',
   usdt:'https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=USDTIRT&source=nobitex_spot',
   oil:'https://api.bitpin.ir/v4/mth/matches/USOON_USDT/',
+  usoonIrt:'https://api.bitpin.org/v4/mth/matches/USOON_IRT/',
+  wti:CNBC('@CL.1'), brent:CNBC('@LCO.1'),
   nobitex:'https://api.nobitex.ir/market/stats?srcCurrency=btc,usdt&dstCurrency=rls',
   coinbase:'https://api.coinbase.com/v2/prices/BTC-USD/spot',
   gecko:'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,pax-gold,tether-gold&vs_currencies=usd',
 };
+const exCnbc=o=>{const q=o?.FormattedQuoteResult?.FormattedQuote?.[0]?.last;const v=q!=null?parseFloat(String(q).replace(/,/g,'')):null;return (v!=null&&!isNaN(v))?v:null};
 
 async function loadAll(animate=true){
   const base={...prev}; // last cycle's prices → for live % change
@@ -894,6 +909,9 @@ async function loadAll(animate=true){
     robust(U.btcUsd).then(o=>arrive('btcUsd',exBit(o),'نوبیتکس')),
     robust(U.usdt).then(o=>arrive('usdt',exBit(o),'نوبیتکس')),
     robust(U.oil).then(o=>arrive('oil',exOil(o),'بیت‌پین')),
+    robust(U.usoonIrt).then(o=>arrive('usoon',exOil(o),'بیت‌پین')),
+    robust(U.wti).then(o=>arrive('oilWti',exCnbc(o),'CNBC')),
+    robust(U.brent).then(o=>arrive('oilBrent',exCnbc(o),'CNBC')),
     // backups (fill only if primary still missing when they land)
     robust(U.nobitex).then(o=>{const nb=o?.stats;
       if(p.btcIrt==null&&nb?.['btc-rls']?.latest)arrive('btcIrt',Math.round(+nb['btc-rls'].latest/10),'نوبیتکس');
