@@ -519,7 +519,11 @@ async function robust(url,ms=9000){
 
 /* ═══ Extraction ═══ */
 function exIR(o){if(!o)return null;for(const v of[o?.data?.price,o?.data?.Price,o?.data?.lastPrice,o?.data?.last_price,o?.data?.value,o?.data?.gold_price,o?.data?.priceGold,o?.price,o?.Price,o?.lastPrice,o?.value,o?.result?.price,o?.data?.[0]?.price,o?.[0]?.price]){if(v!=null&&!isNaN(+v))return+v}return null}
-function exSilver(o){if(!o)return null;const arrs=[o?.data?.products,o?.data?.items,o?.data?.results,o?.data,o?.products,o?.items,o?.results,o].filter(Array.isArray);for(const a of arrs)for(const it of a){if(!it||typeof it!=='object')continue;const b=JSON.stringify(it).toLowerCase();if(['silver','نقره','noghre','xag'].some(k=>b.includes(k))&&!['gold','طلا','tala','xau'].some(k=>b.includes(k))){const p=it.price??it.value??it.amount??it.last_price??it.current_price;if(p!=null&&!isNaN(+p))return+p}}return exIR(o)}
+function exSilver(o){if(!o)return null;
+  // digikala direct shape: { silver999:{price}, gold18:{price} }
+  const dk=o?.silver999?.price??o?.data?.silver999?.price??o?.silver?.price;
+  if(dk!=null&&!isNaN(+dk))return+dk;
+  const arrs=[o?.data?.products,o?.data?.items,o?.data?.results,o?.data,o?.products,o?.items,o?.results,o].filter(Array.isArray);for(const a of arrs)for(const it of a){if(!it||typeof it!=='object')continue;const b=JSON.stringify(it).toLowerCase();if(['silver','نقره','noghre','xag'].some(k=>b.includes(k))&&!['gold','طلا','tala','xau'].some(k=>b.includes(k))){const p=it.price??it.value??it.amount??it.last_price??it.current_price;if(p!=null&&!isNaN(+p))return+p}}return null}
 function scale(v,lo,hi){if(v==null)return null;for(const m of[1,10,100,1000,.1]){const s=v*m;if(s>=lo&&s<=hi)return Math.round(s)}return Math.round(v)}
 const exBit=o=>o?.data?.[0]?.price??o?.data?.price??null;
 function exOil(o){const r=(Array.isArray(o)?o[0]?.price:null)??o?.results?.[0]?.price??o?.matches?.[0]?.price??o?.data?.[0]?.price??o?.data?.price??o?.price??o?.last_price;return r!=null?+r:null}
