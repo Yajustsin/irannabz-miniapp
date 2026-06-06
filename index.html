@@ -4,6 +4,15 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
   <title>نبض ایران</title>
+  <!-- PWA / Add to Home Screen -->
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <meta name="theme-color" content="#090a0f"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="نبض ایران"/>
+  <link rel="apple-touch-icon" href="apple-touch-icon.png"/>
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -266,6 +275,7 @@
     .ft-brand{display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:5px}
     .ft-brand span{font-size:12.5px;font-weight:800;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;opacity:.85}
     .ft-sub{font-size:10px;color:var(--tx-3)}
+    .ft-sub.stale{color:#d9a23a}
     .hidden{display:none!important}
   </style>
 </head>
@@ -939,10 +949,21 @@ async function loadAll(animate=true){
   prev={...p};saveP();
   if(animate){const moved=ALL_KEYS.some(k=>lastP[k]!=null&&p[k]!=null&&Math.abs((p[k]-lastP[k])/lastP[k])>0.0008);if(moved)hapticN('success')}
   lastP={...p};
-  // only warn if MANY prices are genuinely unavailable (no fresh + no cache) — i.e. real outage
-  if(ALL_KEYS.filter(k=>p[k]==null).length>=Math.ceil(ALL_KEYS.length*0.6))showToast();
-  const now=new Date();
-  document.getElementById('ftTs').textContent='آخرین بروزرسانی: '+now.toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'});
+
+  // ── footer freshness: honest time, distinguishes live vs cached ──
+  const freshCount=Object.keys(srcUsed).length;          // keys that got fresh data this cycle
+  const healthy=freshCount>=Math.ceil(ALL_KEYS.length/2);
+  const fmtTime=ts=>new Date(ts).toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'});
+  let lastFreshTs=0; try{lastFreshTs=+localStorage.getItem('inz_freshts')||0}catch{}
+  const ft=document.getElementById('ftTs');
+  if(healthy){
+    lastFreshTs=Date.now(); try{localStorage.setItem('inz_freshts',lastFreshTs)}catch{}
+    ft.textContent='آخرین بروزرسانی: '+fmtTime(lastFreshTs);
+    ft.classList.remove('stale');
+  } else {
+    ft.textContent=lastFreshTs?('قیمت‌های ذخیره‌شده · آخرین بروزرسانی '+fmtTime(lastFreshTs)):'در حال اتصال…';
+    ft.classList.add('stale');
+  }
 }
 
 renderSkeleton();
