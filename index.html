@@ -274,7 +274,8 @@
     .ft-rule{width:34px;height:2px;background:var(--gold-grad);border-radius:1px;margin:0 auto 12px;opacity:.45}
     .ft-brand{display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:5px}
     .ft-brand span{font-size:12.5px;font-weight:800;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;opacity:.85}
-    .ft-sub{font-size:10px;color:var(--tx-3)}
+    .ft-sub{font-size:10px;color:var(--tx-3);transition:color .3s}
+    .ft-sub.stale{color:#caa24a}
     .ft-sub.stale{color:#d9a23a}
     .hidden{display:none!important}
   </style>
@@ -486,6 +487,8 @@ try{hist=JSON.parse(localStorage.getItem(HK)||'{}')}catch{}
 try{prev=JSON.parse(localStorage.getItem(PK)||'{}')}catch{}
 try{pins=JSON.parse(localStorage.getItem(PINK)||'[]')}catch{}
 try{cacheSrc=JSON.parse(localStorage.getItem(SCK)||'{}')}catch{}
+let cacheTs=+(localStorage.getItem('inz_ts4')||0);  // ms timestamp of last fresh load
+const faTime=ms=>{try{return new Date(ms).toLocaleTimeString('fa-IR',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
 const saveC=()=>{try{localStorage.setItem(CK,JSON.stringify(cache));localStorage.setItem(SCK,JSON.stringify(cacheSrc))}catch{}};
 const saveH=()=>{try{localStorage.setItem(HK,JSON.stringify(hist))}catch{}};
 const saveP=()=>{try{localStorage.setItem(PK,JSON.stringify(prev))}catch{}};
@@ -874,7 +877,8 @@ const U={
   usdt:'https://widget-data.bitycle.com/c1/api/exchange/market_price_info?market=USDTIRT&source=nobitex_spot',
   oil:'https://api.bitpin.ir/v4/mth/matches/USOON_USDT/',
   usoonIrt:'https://api.bitpin.org/v4/mth/matches/USOON_IRT/',
-  wti:CNBC('@CL.1'), brent:CNBC('@LCO.1'),
+  wti:CNBC('@CL.1'), brent:CNBC('@LCO.1'), btcCnbc:CNBC('BTC.CM='),
+  cnbcGold:CNBC('@GC.1'), cnbcSilver:CNBC('@SI.1'), cnbcPlat:CNBC('@PL.1'), cnbcPall:CNBC('@PA.1'), cnbcCopper:CNBC('@HG.1'),
   nobitex:'https://api.nobitex.ir/market/stats?srcCurrency=btc,usdt&dstCurrency=rls',
   coinbase:'https://api.coinbase.com/v2/prices/BTC-USD/spot',
   gecko:'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,pax-gold,tether-gold&vs_currencies=usd',
@@ -894,9 +898,11 @@ async function loadAll(animate=true){
   paint(p,prevChg,false);updateBtcCard(p,prevChg);updateMood(prevChg);
 
   // ── 2) each source updates its own card the moment it lands ──
-  const arrive=(key,v,src)=>{
+  let freshN=0;
+  const arrive=(key,v,src,net=true)=>{
     if(v==null)return;
     p[key]=v;cache[key]=v;srcUsed[key]=src;cacheSrc[key]=src;pushHist(key,v);
+    if(net)freshN++;
     prevChg[key]=chgLive(key,v);
     updateOne(key,p,prevChg,animate);
     updateMood(prevChg);
@@ -905,12 +911,12 @@ async function loadAll(animate=true){
   const tryDerived=()=>{
     const OZ=31.1035;
     // domestic metals from global ounce × dollar
-    if(p.silverIr==null&&p.xag!=null&&p.usdt!=null)arrive('silverIr',Math.round(p.xag/OZ*p.usdt),'انس جهانی');
-    if(p.goldIr==null&&p.xau!=null&&p.usdt!=null)arrive('goldIr',Math.round(p.xau/OZ*0.750*p.usdt),'انس جهانی');
-    // crypto/dollar cross-derivation: any two give the third
-    if(p.usdt==null&&p.btcIrt!=null&&p.btcUsd!=null&&p.btcUsd>0)arrive('usdt',Math.round(p.btcIrt/p.btcUsd),'محاسبه از BTC');
-    if(p.btcIrt==null&&p.btcUsd!=null&&p.usdt!=null)arrive('btcIrt',Math.round(p.btcUsd*p.usdt),'محاسبه از دلار');
-    if(p.btcUsd==null&&p.btcIrt!=null&&p.usdt!=null&&p.usdt>0)arrive('btcUsd',Math.round(p.btcIrt/p.usdt),'محاسبه از تومان');
+    if(p.silverIr==null&&p.xag!=null&&p.usdt!=null)arrive('silverIr',Math.round(p.xag/OZ*p.usdt),'انس جهانی',false);
+    if(p.goldIr==null&&p.xau!=null&&p.usdt!=null)arrive('goldIr',Math.round(p.xau/OZ*0.750*p.usdt),'انس جهانی',false);
+    // bitcoin toman = btc-usd × dollar (most accurate); cross-derive the rest
+    if(p.btcIrt==null&&p.btcUsd!=null&&p.usdt!=null)arrive('btcIrt',Math.round(p.btcUsd*p.usdt),'بیت‌کوین × دلار',false);
+    if(p.usdt==null&&p.btcIrt!=null&&p.btcUsd!=null&&p.btcUsd>0)arrive('usdt',Math.round(p.btcIrt/p.btcUsd),'محاسبه‌ای',false);
+    if(p.btcUsd==null&&p.btcIrt!=null&&p.usdt!=null&&p.usdt>0)arrive('btcUsd',Math.round(p.btcIrt/p.usdt),'محاسبه‌ای',false);
   };
 
   const jobs=[
@@ -921,23 +927,29 @@ async function loadAll(animate=true){
     robust(U.xpt).then(o=>arrive('xpt',o?.price??null,'Gold-API')),
     robust(U.xpd).then(o=>arrive('xpd',o?.price??null,'Gold-API')),
     robust(U.hg).then(o=>arrive('copper',o?.price??null,'Gold-API')),
-    robust(U.btcIrt).then(o=>arrive('btcIrt',exBit(o),'نوبیتکس')),
-    robust(U.btcUsd).then(o=>arrive('btcUsd',exBit(o),'نوبیتکس')),
     robust(U.usdt).then(o=>arrive('usdt',exBit(o),'نوبیتکس')),
     robust(U.oil).then(o=>arrive('oil',exOil(o),'بیت‌پین')),
     robust(U.usoonIrt).then(o=>arrive('usoon',exOil(o),'بیت‌پین')),
     robust(U.wti).then(o=>arrive('oilWti',exCnbc(o),'CNBC')),
     robust(U.brent).then(o=>arrive('oilBrent',exCnbc(o),'CNBC')),
-    // backups (fill only if primary still missing when they land)
-    robust(U.nobitex).then(o=>{const nb=o?.stats;
-      if(p.btcIrt==null&&nb?.['btc-rls']?.latest)arrive('btcIrt',Math.round(+nb['btc-rls'].latest/10),'نوبیتکس');
-      if(p.usdt==null&&nb?.['usdt-rls']?.latest)arrive('usdt',Math.round(+nb['usdt-rls'].latest/10),'نوبیتکس');}),
-    robust(U.coinbase).then(o=>{if(p.btcUsd==null&&o?.data?.amount)arrive('btcUsd',Math.round(+o.data.amount),'Coinbase');}),
+    // ── Bitcoin: live sources (coinbase/coingecko/cnbc all agree) ──
+    robust(U.coinbase).then(o=>{if(o?.data?.amount)arrive('btcUsd',Math.round(+o.data.amount),'Coinbase');}),
     robust(U.gecko).then(o=>{
       if(p.btcUsd==null&&o?.bitcoin?.usd)arrive('btcUsd',Math.round(o.bitcoin.usd),'CoinGecko');
       const g=o?.['pax-gold']?.usd??o?.['tether-gold']?.usd;
       if(p.xau==null&&g)arrive('xau',Math.round(g*100)/100,'CoinGecko');
     }),
+    robust(U.btcCnbc).then(o=>{if(p.btcUsd==null)arrive('btcUsd',Math.round(exCnbc(o)),'CNBC');}),
+    // ── btcIrt (toman): nobitex live, else derived ──
+    robust(U.nobitex).then(o=>{const nb=o?.stats;
+      if(nb?.['btc-rls']?.latest)arrive('btcIrt',Math.round(+nb['btc-rls'].latest/10),'نوبیتکس');
+      if(p.usdt==null&&nb?.['usdt-rls']?.latest)arrive('usdt',Math.round(+nb['usdt-rls'].latest/10),'نوبیتکس');}),
+    // ── CNBC metals backup (CORS-open, no proxy) — fills if Gold-API is down ──
+    robust(U.cnbcGold).then(o=>{if(p.xau==null)arrive('xau',exCnbc(o),'CNBC');}),
+    robust(U.cnbcSilver).then(o=>{if(p.xag==null)arrive('xag',exCnbc(o),'CNBC');}),
+    robust(U.cnbcPlat).then(o=>{if(p.xpt==null)arrive('xpt',exCnbc(o),'CNBC');}),
+    robust(U.cnbcPall).then(o=>{if(p.xpd==null)arrive('xpd',exCnbc(o),'CNBC');}),
+    robust(U.cnbcCopper).then(o=>{if(p.copper==null)arrive('copper',exCnbc(o),'CNBC');}),
   ];
   await Promise.allSettled(jobs);
   tryDerived();
