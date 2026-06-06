@@ -70,7 +70,7 @@
     .tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
 
     /* ═══════════ HEADER ═══════════ */
-    .header{padding:16px 18px 8px}
+    .header{padding:calc(16px + env(safe-area-inset-top,0px)) 18px 8px}
     .header-row{display:flex;align-items:center;justify-content:space-between}
     .brand{display:flex;align-items:center;gap:11px}
     .brand-logo{width:40px;height:40px;flex-shrink:0;filter:drop-shadow(0 2px 7px rgba(232,200,115,.22))}
@@ -431,7 +431,6 @@
   <button class="sheet-btn" id="calcClose">بستن</button>
 </div>
 
-<div class="toast" id="toast">اتصال ضعیف — آخرین قیمت‌های ذخیره‌شده نمایش داده می‌شود</div>
 
 <script>
 /* ═══ Telegram ═══ */
@@ -846,7 +845,7 @@ document.getElementById('calcChips').addEventListener('click',e=>{const c=e.targ
 document.getElementById('calcIn').addEventListener('input',calcCompute);
 
 /* ═══ Toast ═══ */
-let toastT;function showToast(){const t=document.getElementById('toast');t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3500)}
+function showToast(){}  /* removed — connectivity status now shown only in footer */
 
 /* ═══ Countdown timer ═══ */
 const PERIOD=60000,CIRC=2*Math.PI*12;
